@@ -1,5 +1,5 @@
 """Exercise 3: Embeddings and Vector Storage
-Learn how to embed documents and store them in vector databases for semantic search."""
+Learn how to embed documents using HuggingFace and store them in Chroma vector database."""
 
 import numpy as np
 
@@ -18,59 +18,48 @@ Embeddings are numerical representations of text that capture semantic meaning:
   - Allow semantic similarity search (not just keyword matching)
   - Enable LLMs to understand relationships between concepts
 
-Example:
-  - "What is the mobile policy?" → [0.24, -0.18, 0.56, ..., 0.02] (384 dimensions)
+Example with all-MiniLM-L6-v2 (384 dimensions):
+  - "What is the mobile policy?" → [0.24, -0.18, 0.56, ..., 0.02] (384 dims)
   - "Describe phone device rules" → [0.25, -0.19, 0.55, ..., 0.03] (similar!)
   - "What is the weather?" → [0.01, 0.92, -0.34, ..., -0.71] (very different)
 """)
 
-# Step 2: Simulate simple embeddings
-print("\n2. SIMULATING SIMPLE EMBEDDINGS")
+# Step 2: Real embedding model
+print("\n2. HUGGINGFACE EMBEDDINGS (all-MiniLM-L6-v2)")
 print("-" * 70)
 
-class SimpleEmbedding:
-    """Simple embedding using word frequency (for demonstration)"""
+print("""
+Using: sentence-transformers/all-MiniLM-L6-v2
+  - Model size: 22 MB (lightweight, fast)
+  - Dimensions: 384
+  - Speed: ~1000 documents/second
+  - Quality: Good semantic understanding
+  - Perfect for: RAG systems, learning environments
 
-    def __init__(self, vocabulary_size=100):
-        self.vocabulary_size = vocabulary_size
-        self.word_to_idx = {}
-        self.idx = 0
+Installation:
+  pip install sentence-transformers
 
-    def encode(self, text: str) -> np.ndarray:
-        """Convert text to a simple embedding"""
-        words = text.lower().split()
+First run will download the model (~100 MB with dependencies).
+""")
 
-        # Create word index mapping
-        for word in words:
-            if word not in self.word_to_idx:
-                if self.idx < self.vocabulary_size:
-                    self.word_to_idx[word] = self.idx
-                    self.idx += 1
+try:
+    from langchain.embeddings import HuggingFaceEmbeddings
+    print("✓ HuggingFaceEmbeddings imported successfully")
 
-        # Create embedding vector (one-hot encoding)
-        embedding = np.zeros(self.vocabulary_size)
-        for word in words:
-            if word in self.word_to_idx:
-                embedding[self.word_to_idx[word]] += 1
+    # Initialize embeddings
+    embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    print("✓ Embeddings model loaded: all-MiniLM-L6-v2")
 
-        # Normalize
-        if np.sum(embedding) > 0:
-            embedding = embedding / np.sum(embedding)
+except ImportError as e:
+    print(f"\n⚠️ Missing dependency: {e}")
+    print("Install with: pip install sentence-transformers langchain")
+    print("Falling back to simulation for demonstration...\n")
+    embeddings_model = None
 
-        return embedding
+# Step 3: Create sample embeddings
+print("\n3. CREATING EMBEDDINGS")
+print("-" * 70)
 
-    def similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """Calculate cosine similarity between vectors"""
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-
-        return dot_product / (norm1 * norm2)
-
-# Sample texts
 texts = [
     "Mobile device policy ensures security and productivity",
     "Employees must protect company mobile devices",
@@ -79,228 +68,223 @@ texts = [
     "Business casual dress code is required",
 ]
 
-embedder = SimpleEmbedding(vocabulary_size=100)
+if embeddings_model:
+    print(f"Encoding {len(texts)} text samples with all-MiniLM-L6-v2...")
+    embeddings = embeddings_model.embed_documents(texts)
 
-print(f"Encoding {len(texts)} text samples...")
-embeddings = [embedder.encode(text) for text in texts]
+    print(f"✓ Created {len(embeddings)} embeddings")
+    print(f"✓ Embedding dimension: {len(embeddings[0])}")
+    print(f"✓ First embedding (first 5 values): {embeddings[0][:5]}")
 
-print(f"\nEmbedding dimensions: {embeddings[0].shape[0]}")
-print(f"First embedding shape: {embeddings[0].shape}")
-print(f"First embedding (first 10 values): {embeddings[0][:10]}")
+else:
+    # Fallback: simple simulation
+    print("Using simulated embeddings for demonstration...")
+    embeddings = [np.random.randn(384).astype(np.float32) for _ in texts]
+    print(f"Created {len(embeddings)} simulated embeddings (384 dims)")
 
-# Step 3: Calculate similarity
-print("\n\n3. SEMANTIC SIMILARITY SEARCH")
+# Step 4: Similarity search
+print("\n4. SEMANTIC SIMILARITY SEARCH")
 print("-" * 70)
 
-query = "mobile device security"
-query_embedding = embedder.encode(query)
+def cosine_similarity(vec1, vec2):
+    """Calculate cosine similarity between vectors"""
+    dot = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+    return dot / (norm1 * norm2)
 
-print(f"Query: '{query}'")
-print(f"\nSimilarity scores to all documents:")
+if embeddings_model:
+    query = "mobile device security"
+    query_embedding = embeddings_model.embed_query(query)
 
-similarities = []
-for i, text in enumerate(texts):
-    score = embedder.similarity(query_embedding, embeddings[i])
-    similarities.append((text, score))
-    print(f"  {score:.3f} - {text[:50]}")
+    print(f"Query: '{query}'")
+    print(f"\nSimilarity scores to documents:")
 
-# Sort by similarity
-similarities.sort(key=lambda x: x[1], reverse=True)
-print(f"\nTop result: '{similarities[0][0][:50]}' (score: {similarities[0][1]:.3f})")
+    scores = []
+    for i, text in enumerate(texts):
+        similarity = cosine_similarity(query_embedding, embeddings[i])
+        scores.append((text, similarity))
+        print(f"  {similarity:.4f} - {text[:50]}")
 
-# Step 4: Real embedding models
-print("\n\n4. REAL EMBEDDING MODELS IN PRODUCTION")
-print("-" * 70)
+    scores.sort(key=lambda x: x[1], reverse=True)
+    print(f"\nTop match: '{scores[0][0][:50]}' (score: {scores[0][1]:.4f})")
 
-embedding_models = {
-    "HuggingFace Models": [
-        ("sentence-transformers/all-MiniLM-L6-v2", 384, "Fast, lightweight, good for RAG"),
-        ("sentence-transformers/all-mpnet-base-v2", 768, "Better quality, slower"),
-        ("sentence-transformers/distilbert-base-multilingual-cased-v2", 768, "Multilingual"),
-    ],
-    "OpenAI": [
-        ("text-embedding-3-small", 1536, "Commercial API"),
-        ("text-embedding-3-large", 3072, "Higher quality"),
-    ],
-    "Local Models": [
-        ("ollama/nomic-embed-text", 768, "Open source, local"),
-        ("ollama/all-minilm", 384, "Lightweight local"),
-    ],
-}
-
-for category, models in embedding_models.items():
-    print(f"\n{category}:")
-    for model, dim, description in models:
-        print(f"  - {model}")
-        print(f"    Dimensions: {dim}, {description}")
-
-# Step 5: Vector storage concepts
-print("\n\n5. VECTOR STORAGE & RETRIEVAL")
+# Step 5: Vector database comparison
+print("\n5. VECTOR DATABASE OPTIONS")
 print("-" * 70)
 
 print("""
-Vector databases are optimized for semantic search:
+Vector Stores Available:
 
-Common Vector Stores:
-  1. Chroma: Simple, open-source, SQLite-based
-  2. Pinecone: Cloud-based, fully managed
-  3. Weaviate: Open-source, full-featured
-  4. Milvus: Scalable, high-performance
-  5. Qdrant: Rust-based, production-ready
-  6. FAISS: Facebook's efficient similarity search
-  7. Elasticsearch: Text + vector search
+1. CHROMA (Recommended for learning)
+   - Local SQLite-based vector database
+   - Simple API, automatic persistence
+   - Perfect for RAG systems
+   - Installation: pip install chromadb
 
-Storage Process:
-  1. Embed each document chunk
-  2. Store embedding + metadata
-  3. Build index for fast retrieval
-  4. Query: embed user query, find nearest neighbors
+2. PINECONE (Cloud-based)
+   - Fully managed vector database
+   - Scales to billions of vectors
+   - Requires API key
+   - Good for production
 
-Retrieval Methods:
-  - Exact: Calculate all distances (slow, accurate)
-  - Approximate: Use HNSW/IVF indices (fast, approximate)
-  - Hybrid: Text + semantic search combined
+3. WEAVIATE (Self-hosted)
+   - Open-source, high-performance
+   - Supports hybrid search
+   - Good for enterprises
+
+4. MILVUS (Enterprise)
+   - Scalable, distributed
+   - High performance
+   - Complex setup
+
+For this course: Using CHROMA (local, simple, perfect for RAG)
 """)
 
-# Step 6: Simulate vector store
-print("\n\n6. SIMULATING A VECTOR STORE")
-print("-" * 70)
-
-class SimpleVectorStore:
-    """Simple in-memory vector store for demonstration"""
-
-    def __init__(self):
-        self.documents = []
-        self.embeddings = []
-        self.metadata = []
-
-    def add_documents(self, texts: list, embeddings: list, metadata: list = None):
-        """Add documents to the store"""
-        self.documents.extend(texts)
-        self.embeddings.extend(embeddings)
-
-        if metadata:
-            self.metadata.extend(metadata)
-        else:
-            self.metadata.extend([{"id": i} for i in range(len(texts))])
-
-    def search(self, query_embedding: np.ndarray, k: int = 3) -> list:
-        """Find top k most similar documents"""
-        similarities = []
-
-        embedder = SimpleEmbedding()
-        for i, emb in enumerate(self.embeddings):
-            score = embedder.similarity(query_embedding, emb)
-            similarities.append({
-                "text": self.documents[i],
-                "score": score,
-                "metadata": self.metadata[i]
-            })
-
-        # Sort by score and return top k
-        similarities.sort(key=lambda x: x["score"], reverse=True)
-        return similarities[:k]
-
-# Create and populate vector store
-vector_store = SimpleVectorStore()
-metadata = [
-    {"source": "policies.txt", "policy": "Mobile Device Policy"},
-    {"source": "policies.txt", "policy": "Mobile Device Policy"},
-    {"source": "policies.txt", "policy": "Remote Work Policy"},
-    {"source": "policies.txt", "policy": "Smoking Policy"},
-    {"source": "policies.txt", "policy": "Dress Code"},
-]
-
-vector_store.add_documents(texts, embeddings, metadata)
-
-# Search
-query = "mobile phone device rules"
-query_emb = embedder.encode(query)
-results = vector_store.search(query_emb, k=2)
-
-print(f"Query: '{query}'")
-print(f"\nTop 2 results:")
-for i, result in enumerate(results, 1):
-    print(f"\n  Result {i}:")
-    print(f"    Similarity: {result['score']:.3f}")
-    print(f"    Policy: {result['metadata']['policy']}")
-    print(f"    Text: {result['text'][:50]}...")
-
-# Step 7: Practical workflow
-print("\n\n7. COMPLETE RAG WORKFLOW")
+# Step 6: Introduction to Chroma
+print("\n6. CHROMA VECTOR DATABASE")
 print("-" * 70)
 
 print("""
-Complete RAG Indexing & Retrieval Flow:
+Chroma is a vector database designed for AI applications:
 
-INDEXING (Offline, one-time):
-  1. Load documents
-  2. Split into chunks
-  3. Generate embeddings for each chunk
-  4. Store embeddings + metadata in vector DB
-  5. Build index for fast search
+Features:
+  ✓ Local storage (SQLite)
+  ✓ Persistent data to disk
+  ✓ Simple Python API
+  ✓ Automatic schema management
+  ✓ Built-in similarity search
+  ✓ Metadata filtering
 
-RETRIEVAL (At query time):
-  1. Generate embedding for user query
-  2. Search vector store (find similar chunks)
-  3. Retrieve top-k chunks + metadata
-  4. Pass to LLM as context
-  5. LLM generates answer
+How it works:
+  1. Store: documents + embeddings + metadata → Chroma
+  2. Search: query → embed query → find similar vectors → return docs
+  3. Persist: data saved to disk automatically
 
-Example:
-  User Query: "What is the mobile policy?"
-    ↓
-  Embedding: [0.12, -0.45, 0.78, ...]
-    ↓
-  Vector Search: Find similar chunks
-    ↓
-  Retrieved Context: [Policy 1 chunk 1, Policy 1 chunk 2, ...]
-    ↓
-  LLM Prompt: "Context: <chunks>. Question: What is the mobile policy?"
-    ↓
-  Answer: "The mobile device policy ensures that all employees..."
+Data structure:
+  {
+    "id": "doc_1",
+    "embedding": [0.24, -0.18, ...],  # 384 dimensions
+    "document": "Mobile device policy...",
+    "metadata": {"source": "policies.txt", "policy": "Mobile Device Policy"}
+  }
 """)
 
-# Step 8: Summary
+# Step 7: Chroma with real embeddings
+print("\n7. CREATING VECTOR STORE WITH CHROMA")
+print("-" * 70)
+
+try:
+    from langchain.vectorstores import Chroma
+    from langchain.schema import Document
+
+    print("✓ Chroma imported successfully")
+
+    if embeddings_model:
+        # Create documents with metadata
+        documents = []
+        for i, text in enumerate(texts):
+            doc = Document(
+                page_content=text,
+                metadata={
+                    "doc_id": i,
+                    "source": "sample_policies.txt"
+                }
+            )
+            documents.append(doc)
+
+        # Create vector store (will create ./chroma_data directory)
+        vector_store = Chroma.from_documents(
+            documents=documents,
+            embedding=embeddings_model,
+            persist_directory="./chroma_data"
+        )
+
+        print(f"✓ Vector store created with {len(documents)} documents")
+        print(f"✓ Data persisted to ./chroma_data")
+
+        # Test similarity search
+        query = "mobile device security"
+        results = vector_store.similarity_search(query, k=2)
+
+        print(f"\nSimilarity search for: '{query}'")
+        print(f"Found {len(results)} relevant documents:")
+
+        for i, result in enumerate(results, 1):
+            print(f"\n  Result {i}:")
+            print(f"    Text: {result.page_content[:60]}...")
+            print(f"    Metadata: {result.metadata}")
+
+    else:
+        print("⚠️ HuggingFaceEmbeddings not available - cannot create real vector store")
+
+except ImportError as e:
+    print(f"⚠️ Missing Chroma: {e}")
+    print("Install with: pip install chromadb")
+
+# Step 8: Production considerations
+print("\n\n8. PRODUCTION CONSIDERATIONS")
+print("-" * 70)
+
+print("""
+For RAG systems in production:
+
+EMBEDDINGS CHOICE:
+  ✓ Use all-MiniLM-L6-v2 for: Fast inference, limited resources
+  ✓ Use all-mpnet-base-v2 for: Better accuracy, more resources available
+  ✓ Update easily: Just change model_name parameter
+
+VECTOR STORE CHOICE:
+  ✓ Chroma: Great for local/small-scale RAG
+  ✓ Upgrade to Pinecone: When you need cloud scalability
+  ✓ Use Weaviate: For hybrid search + filtering
+
+OPTIMIZATION:
+  • Batch embedding: Embed multiple documents together
+  • Caching: Cache embeddings to avoid recomputation
+  • Indexing: Use HNSW for faster approximate search
+  • Tuning: Test different chunk sizes with your embeddings
+""")
+
+# Step 9: Summary
 print("\n" + "=" * 70)
 print("KEY CONCEPTS:")
 print("=" * 70)
 print("""
-1. EMBEDDINGS:
-   - Convert text to high-dimensional vectors
+1. HUGGINGFACE EMBEDDINGS:
+   - Convert text to 384-dimensional vectors (all-MiniLM-L6-v2)
    - Capture semantic meaning
    - Enable similarity search
-   - Usually 300-3000 dimensions
+   - Fast and lightweight
 
-2. EMBEDDING MODELS:
-   - HuggingFace: Popular, open-source, varied quality
-   - OpenAI: High quality, API-based
-   - Local: Privacy-friendly, Ollama support
-   - Choose based on quality/speed/privacy needs
+2. CHROMA VECTOR DATABASE:
+   - Store embeddings with metadata
+   - Persistent local storage (SQLite)
+   - Simple similarity search API
+   - Automatic document management
 
-3. VECTOR DATABASES:
-   - Store embeddings + metadata
-   - Optimized for similarity search
-   - Index structures: HNSW, IVF, etc.
-   - Various options: Chroma, Pinecone, Weaviate, etc.
+3. SEMANTIC SEARCH FLOW:
+   Text → Embedding → Vector Store → Similarity Search → Results
 
-4. SIMILARITY METRICS:
-   - Cosine similarity: Most common (dot product / norms)
-   - Euclidean distance: Less common
-   - Manhattan distance: Rarely used
-   - Cosine similarity is 0-1 (0=opposite, 1=identical)
+4. EMBEDDINGS FOR RAG:
+   - Document chunks are embedded once (indexing)
+   - User query embedded at search time
+   - Find similar chunks by vector distance
+   - Return top-k most relevant documents
 
-5. PRACTICAL CONSIDERATIONS:
-   - Embedding quality impacts RAG quality
-   - Store metadata for source attribution
-   - Index size affects retrieval speed
-   - Consider privacy (local vs cloud embeddings)
-   - Batch embedding for efficiency
+5. PRACTICAL WORKFLOW:
+   - Initialize embeddings: HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+   - Create vector store: Chroma.from_documents(docs, embeddings)
+   - Search: vector_store.similarity_search(query, k=3)
 
-6. OPTIMIZATION:
-   - Choose embedding model size/speed trade-off
-   - Tune chunk size for embedding quality
-   - Use approximate search for large datasets
-   - Cache embeddings to avoid recomputation
-   - Monitor retrieval quality metrics
+6. REAL IMPLEMENTATION:
+   ✓ No simulation - using actual models
+   ✓ No API keys - runs locally
+   ✓ Persistent storage - data saved to disk
+   ✓ Production-ready - used in real RAG systems
 """)
+
+print("\n✅ Exercise 3 complete!")
+print("Next: Use these embeddings + Chroma in Exercise 4 for full RAG system")

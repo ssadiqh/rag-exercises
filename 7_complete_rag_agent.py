@@ -1,12 +1,30 @@
-"""Exercise 7: Complete RAG Agent
-Build a full-featured RAG agent combining documents, retrieval, prompts, and memory."""
+"""Exercise 7: Complete RAG Agent with Ollama LLM
+Build a full-featured RAG agent combining HuggingFace embeddings, Chroma, and local Ollama LLM."""
 
 import tempfile
-import numpy as np
+import os
 
 print("=" * 70)
-print("EXERCISE 7: Complete RAG Agent with Memory and Prompts")
+print("EXERCISE 7: Complete RAG Agent with Local LLM")
 print("=" * 70)
+
+# Step 0: Prerequisites check
+print("\n0. CHECKING PREREQUISITES")
+print("-" * 70)
+
+print("""
+Required for this exercise:
+  1. Ollama running locally (localhost:11434)
+  2. Qwen2.5:7b model downloaded
+
+Setup Ollama:
+  - Install from: https://ollama.ai
+  - Run: ollama serve
+  - Pull model: ollama pull qwen2.5:7b
+  - Test: curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:7b","prompt":"test"}'
+
+Verify Ollama is running before proceeding...
+""")
 
 # Step 1: Load and prepare documents
 print("\n1. LOADING AND PREPARING DOCUMENTS")
@@ -94,124 +112,90 @@ print(f"Document loaded: {len(company_policies)} characters, 9 policies")
 print("\n2. SPLITTING DOCUMENTS")
 print("-" * 70)
 
-class RecursiveCharacterTextSplitter:
-    def __init__(self, chunk_size: int = 600, chunk_overlap: int = 100):
-        self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
-
-    def split_text(self, text: str) -> list:
-        chunks = []
-        start = 0
-
-        while start < len(text):
-            end = min(start + self.chunk_size, len(text))
-
-            if end < len(text):
-                last_space = text.rfind(' ', start, end)
-                if last_space > start:
-                    end = last_space
-
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-
-            start = end - self.chunk_overlap
-
-        return chunks
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100)
-chunks = splitter.split_text(company_policies)
+with open(doc_path, 'r') as f:
+    chunks = splitter.split_text(f.read())
+
 print(f"Split into {len(chunks)} chunks")
 
-# Step 3: Create embeddings
-print("\n3. CREATING EMBEDDINGS")
+# Step 3: Create documents
+print("\n3. CREATING DOCUMENT OBJECTS")
 print("-" * 70)
 
-class SimpleEmbedder:
-    def embed(self, text: str) -> np.ndarray:
-        seed = hash(text) % 2**32
-        np.random.seed(seed)
-        return np.random.randn(128).astype(np.float32)
+from langchain.schema import Document
 
-    def similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        dot = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-        return dot / (norm1 * norm2)
+documents = []
+for i, chunk in enumerate(chunks):
+    doc = Document(
+        page_content=chunk,
+        metadata={"source": "policies.txt", "chunk_id": i}
+    )
+    documents.append(doc)
 
-embedder = SimpleEmbedder()
-embeddings = [embedder.embed(chunk) for chunk in chunks]
-print(f"Created {len(embeddings)} embeddings (dimension: 128)")
+print(f"Created {len(documents)} documents")
 
-# Step 4: Vector store
-print("\n4. VECTOR STORE")
+# Step 4: Embeddings and Vector Store
+print("\n4. SETTING UP EMBEDDINGS AND VECTOR STORE")
 print("-" * 70)
 
-class VectorStore:
-    def __init__(self):
-        self.chunks = []
-        self.embeddings = []
-        self.metadata = []
+try:
+    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain.vectorstores import Chroma
 
-    def add(self, chunk: str, embedding: np.ndarray, metadata: dict = None):
-        self.chunks.append(chunk)
-        self.embeddings.append(embedding)
-        self.metadata.append(metadata or {})
+    print("Loading HuggingFaceEmbeddings (all-MiniLM-L6-v2)...")
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    def search(self, query: str, k: int = 3):
-        query_emb = embedder.embed(query)
-        scores = [(i, embedder.similarity(query_emb, emb))
-                  for i, emb in enumerate(self.embeddings)]
-        scores.sort(key=lambda x: x[1], reverse=True)
+    print("Creating Chroma vector store...")
+    vector_store = Chroma.from_documents(
+        documents=documents,
+        embedding=embeddings,
+        persist_directory="./chroma_rag_complete"
+    )
+    print(f"✓ Vector store ready with {len(documents)} documents")
 
-        results = []
-        for idx, score in scores[:k]:
-            results.append({
-                "chunk": self.chunks[idx],
-                "score": score,
-                "metadata": self.metadata[idx]
-            })
-        return results
+except ImportError as e:
+    print(f"⚠️ Error: {e}")
+    print("Install with: pip install sentence-transformers chromadb")
+    vector_store = None
+    embeddings = None
 
-# Populate vector store
-vector_store = VectorStore()
+# Step 5: Initialize Ollama LLM
+print("\n5. INITIALIZING OLLAMA LLM")
+print("-" * 70)
 
-policy_mapping = {
-    "Mobile": "Mobile Device Policy",
-    "Policy 1": "Mobile Device Policy",
-    "Remote": "Remote Work Policy",
-    "Policy 2": "Remote Work Policy",
-    "Smoking": "Smoking Policy",
-    "Policy 3": "Smoking Policy",
-    "Dress": "Dress Code",
-    "Policy 4": "Dress Code",
-    "Internet": "Internet and Email Policy",
-    "Policy 5": "Internet and Email Policy",
-    "Vacation": "Vacation and Paid Time Off",
-    "Policy 6": "Vacation and Paid Time Off",
-    "Conduct": "Code of Conduct",
-    "Policy 7": "Code of Conduct",
-    "Safety": "Health and Safety",
-    "Policy 8": "Health and Safety",
-    "Confidentiality": "Confidentiality",
-    "Policy 9": "Confidentiality",
-}
+try:
+    from langchain_ollama import OllamaLLM
 
-for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
-    policy = "General"
-    for keyword, policy_name in policy_mapping.items():
-        if keyword in chunk:
-            policy = policy_name
-            break
+    print("Connecting to Ollama (localhost:11434)...")
+    print("Model: qwen2.5:7b")
 
-    vector_store.add(chunk, emb, {"chunk_id": i, "policy": policy, "source": "policies.txt"})
+    llm = OllamaLLM(
+        model="qwen2.5:7b",
+        temperature=0.3,
+        base_url="http://localhost:11434"
+    )
 
-print(f"Vector store ready with {len(vector_store.chunks)} indexed chunks")
+    # Test connection
+    test_response = llm.invoke("Hello")
+    print(f"✓ Ollama connection successful")
+    print(f"✓ Test response received ({len(test_response)} chars)")
 
-# Step 5: Conversation memory
-print("\n5. CONVERSATION MEMORY")
+except ImportError as e:
+    print(f"⚠️ Error: {e}")
+    print("Install with: pip install langchain-ollama")
+    print("Also ensure Ollama is running: ollama serve")
+    llm = None
+
+except Exception as e:
+    print(f"⚠️ Connection error: {e}")
+    print("Make sure Ollama is running: ollama serve")
+    print("And Qwen model is available: ollama pull qwen2.5:7b")
+    llm = None
+
+# Step 6: Conversation memory
+print("\n6. SETTING UP CONVERSATION MEMORY")
 print("-" * 70)
 
 class ConversationMemory:
@@ -227,26 +211,26 @@ class ConversationMemory:
     def get_history(self) -> str:
         if not self.messages:
             return ""
-        lines = [f"{m['role'].upper()}: {m['content']}" for m in self.messages]
+        lines = [f"{m['role'].upper()}: {m['content']}" for m in self.messages[-4:]]  # Last 4 for context
         return "\n".join(lines)
 
     def clear(self):
         self.messages = []
 
 memory = ConversationMemory()
-print("Conversation memory initialized")
+print("✓ Conversation memory initialized")
 
-# Step 6: Prompt template
-print("\n6. PROMPT TEMPLATE")
+# Step 7: RAG Prompt template
+print("\n7. CREATING RAG PROMPT TEMPLATE")
 print("-" * 70)
 
-RAG_PROMPT_TEMPLATE = """You are a helpful assistant answering questions about Innovatech company policies.
+RAG_PROMPT = """You are a helpful assistant answering questions about Innovatech company policies.
 
 INSTRUCTIONS:
 1. Use ONLY the provided context to answer questions
 2. If the context doesn't contain the answer, say "I don't have information about that"
 3. Be concise but complete
-4. Reference which policy you're citing
+4. Reference which policy you're citing when relevant
 
 {chat_history}
 CONTEXT:
@@ -256,248 +240,209 @@ QUESTION: {question}
 
 ANSWER:"""
 
-class PromptTemplate:
-    def __init__(self, template: str):
-        self.template = template
+print("✓ RAG prompt template ready")
 
-    def format(self, **kwargs) -> str:
-        result = self.template
-        for key, value in kwargs.items():
-            result = result.replace(f"{{{key}}}", str(value))
-        return result
-
-prompt_template = PromptTemplate(RAG_PROMPT_TEMPLATE)
-print("Prompt template ready")
-
-# Step 7: Main RAG Agent
-print("\n7. COMPLETE RAG AGENT")
+# Step 8: Complete RAG Agent
+print("\n8. COMPLETE RAG AGENT")
 print("-" * 70)
 
 class RAGAgent:
-    def __init__(self, vector_store, memory, embedder, prompt_template):
+    def __init__(self, vector_store, llm, memory, embeddings):
         self.vector_store = vector_store
+        self.llm = llm
         self.memory = memory
-        self.embedder = embedder
-        self.prompt_template = prompt_template
+        self.embeddings = embeddings
         self.turn_count = 0
 
     def answer(self, query: str, verbose: bool = True) -> str:
+        if not self.vector_store or not self.llm:
+            print("⚠️ Vector store or LLM not available")
+            return ""
+
         self.turn_count += 1
 
         if verbose:
-            print(f"\n--- Turn {self.turn_count} ---")
+            print(f"\n{'='*60}")
+            print(f"Turn {self.turn_count}")
             print(f"User: {query}")
+            print('-'*60)
 
-        # 1. Retrieve context
-        results = self.vector_store.search(query, k=3)
-        context = "\n\n".join([
-            f"[{r['metadata']['policy']}] {r['chunk'][:200]}..."
-            for r in results
-        ])
+        # Retrieve context
+        results = self.vector_store.similarity_search(query, k=3)
+        context = "\n\n".join([r.page_content for r in results])
 
-        # 2. Get chat history
-        chat_history = memory.get_history()
+        # Get chat history
+        chat_history = self.memory.get_history()
         if chat_history:
             chat_history = f"PREVIOUS CONVERSATION:\n{chat_history}\n\n"
 
-        # 3. Format prompt
-        formatted_prompt = self.prompt_template.format(
+        # Format prompt
+        prompt = RAG_PROMPT.format(
             chat_history=chat_history,
             context=context,
             question=query
         )
 
-        # 4. Simulate LLM response
-        # In real implementation, this would call an LLM API
-        answer = self._simulate_llm_response(query, context)
+        # Get LLM response
+        try:
+            answer = self.llm.invoke(prompt)
+        except Exception as e:
+            print(f"⚠️ LLM error: {e}")
+            answer = "I'm having trouble generating a response. Please ensure Ollama is running."
 
         if verbose:
-            print(f"Assistant: {answer}")
-            print(f"Sources: {', '.join([r['metadata']['policy'] for r in results])}")
+            print(f"Assistant: {answer[:200]}...")
+            print(f"Sources: {', '.join([r.metadata.get('source', 'unknown') for r in results])}")
 
-        # 5. Store in memory
+        # Store in memory
         self.memory.add_user_message(query)
         self.memory.add_assistant_message(answer)
 
         return answer
 
-    def _simulate_llm_response(self, query: str, context: str) -> str:
-        """Simulate LLM response for demonstration"""
-        if "mobile" in query.lower():
-            return "The mobile device policy requires password protection and security patches. Company data needs encryption, and VPN is required on public WiFi. Lost devices should be reported immediately to IT."
+# Initialize agent
+if vector_store and llm:
+    agent = RAGAgent(vector_store, llm, memory, embeddings)
+    print("✓ RAG Agent initialized")
 
-        elif "remote" in query.lower():
-            return "Remote work is permitted up to 3 days per week with manager approval. Employees must maintain core hours (10 AM - 3 PM) and use approved platforms for video calls."
+    # Step 9: Demo conversation
+    print("\n9. MULTI-TURN CONVERSATION DEMO")
+    print("=" * 70)
 
-        elif "smoke" in query.lower() or "smoking" in query.lower():
-            return "Smoking is strictly prohibited inside buildings and vehicles. It's only allowed in designated outdoor areas, at least 20 feet away from entrances."
+    demo_queries = [
+        "What is the mobile device policy?",
+        "Can I store company data on my phone?",
+        "Can I work from home?",
+    ]
 
-        elif "dress" in query.lower():
-            return "Business casual is the required dress code, meaning slacks/skirts with a collared shirt or blouse. Denim is not permitted, but exceptions may be approved by managers."
+    for query in demo_queries:
+        try:
+            agent.answer(query)
+        except KeyboardInterrupt:
+            print("\n\nConversation interrupted")
+            break
+        except Exception as e:
+            print(f"Error: {e}")
 
-        elif "vacation" in query.lower() or "time off" in query.lower():
-            return "Employees receive 20 days of paid vacation annually plus 10 company holidays. Requests must be submitted 2 weeks in advance."
+    # Step 10: Show conversation memory
+    print("\n10. CONVERSATION MEMORY")
+    print("=" * 70)
+    print(memory.get_history())
 
-        elif "security" in query.lower() or "data" in query.lower():
-            return "All company information must be kept confidential. Non-disclosure agreements are required upon hire. Data security protocols must always be followed."
+else:
+    print("\n⚠️ Cannot initialize agent - vector store or LLM not available")
 
-        else:
-            return "I can help answer questions about company policies. Please ask about specific policies like mobile devices, remote work, smoking, dress code, vacation, or confidentiality."
-
-# Step 8: Demo conversations
-print("\n8. MULTI-TURN CONVERSATION DEMO")
-print("=" * 70)
-
-agent = RAGAgent(vector_store, memory, embedder, prompt_template)
-
-demo_queries = [
-    "What is the mobile device policy?",
-    "Can I store company data on my personal phone?",
-    "What if I lose it?",
-    "Can I work from home?",
-    "How many vacation days do I get?",
-]
-
-for query in demo_queries:
-    agent.answer(query)
-
-# Step 9: Show conversation memory
-print("\n\n9. CONVERSATION MEMORY SUMMARY")
-print("=" * 70)
-print(memory.get_history())
-
-# Step 10: Complete workflow visualization
+# Step 11: Complete workflow
 print("\n\n" + "=" * 70)
-print("COMPLETE RAG AGENT WORKFLOW")
+print("COMPLETE RAG SYSTEM ARCHITECTURE")
 print("=" * 70)
 
-print(f"""
-INPUT: User Query
-  ↓
-RETRIEVAL: Vector Store Search
-  - Embed query
-  - Find similar chunks
-  - Retrieve top-k with metadata
-  - {len(results)} chunks retrieved
-  ↓
-CONTEXT ASSEMBLY: Format Retrieved Context
-  - Combine chunks
-  - Add policy references
-  - Format for LLM
-  ↓
-MEMORY: Get Conversation History
-  - {len(memory.messages)} messages in history
-  - Include previous exchanges
-  - Maintain context
-  ↓
-PROMPT FORMATTING: Create LLM Prompt
-  - Include system instructions
-  - Add conversation history
-  - Embed retrieved context
-  - Add user question
-  ↓
-LLM GENERATION: Get Response
-  - Call LLM with formatted prompt
-  - Generate answer based on context
-  - Constrained by instructions
-  ↓
-OUTPUT: Return Answer
-  - Provide user-friendly response
-  - Include source attribution
-  - Store in conversation memory
-  ↓
-RESULT: Accurate, Grounded, Traceable Answer
+print("""
+┌─────────────────────────────────────────────────────────────┐
+│           COMPLETE LOCAL RAG SYSTEM STACK                   │
+└─────────────────────────────────────────────────────────────┘
+
+COMPONENTS:
+  1. Documents
+     └─ Text files, PDFs, web content
+
+  2. Text Splitter
+     └─ RecursiveCharacterTextSplitter
+        (600 chars, 100 overlap)
+
+  3. Embeddings
+     └─ HuggingFaceEmbeddings (all-MiniLM-L6-v2)
+        (384-dimensional vectors)
+
+  4. Vector Database
+     └─ Chroma (Local SQLite)
+        (./chroma_rag_complete/)
+
+  5. Language Model
+     └─ Ollama + Qwen2.5:7b
+        (localhost:11434)
+
+  6. Memory
+     └─ ConversationBufferMemory
+        (Last 4 turns for context)
+
+WORKFLOW:
+
+  USER QUERY
+       ↓
+  Embed query (all-MiniLM-L6-v2)
+       ↓
+  Search Chroma vector store (top-3)
+       ↓
+  Assemble context with metadata
+       ↓
+  Include conversation history
+       ↓
+  Format RAG prompt
+       ↓
+  Send to Ollama LLM
+       ↓
+  Generate grounded answer
+       ↓
+  Store in conversation memory
+       ↓
+  Return to user
+
+BENEFITS:
+  ✓ Fully local (no API keys, no cloud)
+  ✓ Offline-capable (after initial setup)
+  ✓ Accurate (grounded in documents)
+  ✓ Traceable (source attribution)
+  ✓ Memory-aware (multi-turn conversations)
+  ✓ Fast (local processing)
+  ✓ Cost-effective (open source)
 """)
 
-# Step 11: Key metrics
-print("\n11. RAG SYSTEM METRICS")
-print("-" * 70)
-
-print(f"""
-System Performance:
-  - Documents indexed: 1
-  - Total chunks: {len(vector_store.chunks)}
-  - Embedding dimension: 128
-  - Retrieval top-k: 3
-  - Conversation turns: {agent.turn_count}
-  - Memory messages: {len(memory.messages)}
-
-Quality Metrics:
-  - Context relevance: Depends on retrieval (vector similarity)
-  - Answer accuracy: Depends on LLM and retrieved context
-  - Source attribution: Included from metadata
-  - Token efficiency: Optimized with chunking and windowing
-
-Improvements for Production:
-  - Use real embedding model (HuggingFace sentence-transformers)
-  - Use real LLM (Ollama, OpenAI, etc.)
-  - Add Chroma or Pinecone for vector storage
-  - Implement actual LLM API calls
-  - Add error handling and validation
-  - Monitor retrieval quality
-  - Implement logging and analytics
-""")
-
-# Cleanup
-import os
-os.unlink(doc_path)
-
-# Step 12: Summary
-print("\n\n" + "=" * 70)
+# Step 12: Summary and next steps
+print("\n" + "=" * 70)
 print("KEY CONCEPTS:")
 print("=" * 70)
 print("""
-1. COMPLETE RAG PIPELINE:
-   ✓ Document loading
-   ✓ Text splitting
-   ✓ Embedding creation
-   ✓ Vector storage
-   ✓ Semantic retrieval
-   ✓ Prompt templating
-   ✓ Conversation memory
-   ✓ LLM integration
+1. COMPLETE LOCAL RAG:
+   ✓ HuggingFaceEmbeddings: all-MiniLM-L6-v2 (384 dims)
+   ✓ Chroma: Local SQLite vector database
+   ✓ Ollama: Local LLM server (Qwen2.5:7b)
+   ✓ Memory: Conversation history management
 
-2. DATA FLOW:
-   Query → Embed → Search → Retrieve Context
-   Context + Memory + Prompt → LLM → Answer
-   Answer + Query → Store in Memory
+2. PRODUCTION-READY ARCHITECTURE:
+   ✓ No external dependencies
+   ✓ No API keys required
+   ✓ Runs completely offline
+   ✓ Easy to scale to cloud (Pinecone, OpenAI)
 
-3. KEY COMPONENTS:
-   - Vector Store: Index and search documents
-   - Embedder: Convert text to vectors
-   - Memory: Track conversation history
-   - Prompt Template: Format LLM input
-   - LLM: Generate answers
+3. MULTI-TURN CONVERSATIONS:
+   ✓ Maintains conversation history
+   ✓ Provides context for follow-up questions
+   ✓ Efficient token management (last 4 turns)
 
-4. ADVANTAGES OF RAG:
-   - Accurate answers grounded in documents
-   - Reduced hallucination
-   - Source attribution
-   - Handles private data safely
-   - Works with updated documents
+4. DOCUMENT GROUNDING:
+   ✓ Answers based on actual documents
+   ✓ Reduced hallucination
+   ✓ Source attribution
+   ✓ Works with proprietary documents
 
-5. PRODUCTION CONSIDERATIONS:
-   - Scalable vector database
-   - Efficient embeddings
-   - Multi-user conversation isolation
-   - Logging and monitoring
-   - Error handling
-   - Performance optimization
+5. EXTENSIBILITY:
+   - Switch embeddings: all-mpnet-base-v2 (better quality)
+   - Switch LLM: Mistral, Llama2, etc.
+   - Upgrade vector store: Pinecone, Weaviate
+   - Add hybrid search: Keyword + semantic
 
-6. COMMON EXTENSIONS:
-   - Multiple document types
-   - Hybrid search (text + semantic)
-   - Advanced memory strategies
-   - Tool integration
-   - Custom retrievers
-   - Ranking and reranking
-
-7. REAL IMPLEMENTATIONS:
-   - LangChain framework
-   - LlamaIndex (GPT Index)
-   - Haystack
-   - Custom solutions
+6. OPTIMIZATION:
+   - Adjust chunk size (300-1000 chars)
+   - Tune similarity threshold (k=1-5)
+   - Adjust LLM temperature (0.1-0.9)
+   - Implement re-ranking for better results
 """)
 
-print("\n✅ RAG Agent successfully created!")
-print("You've learned the complete flow for building production RAG systems.")
+# Cleanup
+os.unlink(doc_path)
+
+print(f"\n✅ EXERCISE 7 COMPLETE!")
+print(f"Vector store saved to: ./chroma_rag_complete/")
+print(f"\nNow you have a fully functional local RAG system!")
+print(f"Try modifying the demo queries and testing with your own documents.")

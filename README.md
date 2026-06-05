@@ -13,11 +13,31 @@ Based on the Skills Network course: **"Summarize Private Documents Using RAG, La
 - Provide traceable, source-attributed answers
 - Maintain confidentiality by processing documents locally
 
+## Stack: Full Local Setup (Option 2 - Recommended)
+
+| Component | Choice | Details |
+|-----------|--------|---------|
+| **Embeddings** | HuggingFace (all-MiniLM-L6-v2) | 384 dimensions, lightweight, fast |
+| **Vector Store** | Chroma (Local SQLite) | Persistent local database, no server |
+| **LLM** | Ollama + Qwen2.5:7b | Local, no API keys, fully offline |
+| **Framework** | LangChain | Orchestration and chain management |
+
 ## Prerequisites
 
+### Required
 - **Python 3.8+**
 - **pip** package manager
-- **Optional: Ollama** for local LLM support (for integration with Exercise 7)
+
+### For Exercise 7 (Complete RAG Agent)
+- **Ollama** installed from https://ollama.ai
+- **Qwen2.5:7b** model: `ollama pull qwen2.5:7b`
+- **Ollama running** in background: `ollama serve`
+
+### Verify Ollama Setup
+```bash
+# Test Ollama is running
+curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:7b","prompt":"hello"}'
+```
 
 ## Quick Start
 
@@ -27,16 +47,36 @@ Based on the Skills Network course: **"Summarize Private Documents Using RAG, La
 pip install -r requirements.txt
 ```
 
-### 2. Run an Exercise
+This installs:
+- **langchain** - Framework for chaining components
+- **langchain-ollama** - Integration with local Ollama
+- **sentence-transformers** - HuggingFace embeddings
+- **chromadb** - Vector database for storage
+
+### 2. Setup Ollama (for Exercise 7)
 
 ```bash
-python 1_document_loading.py
-python 2_text_splitting.py
-python 3_embeddings_vector_store.py
-# ... and so on
+# Install Ollama from https://ollama.ai
+# Then start the server:
+ollama serve
+
+# In another terminal, pull the model:
+ollama pull qwen2.5:7b
 ```
 
-No API keys required — everything runs locally!
+### 3. Run Exercises
+
+```bash
+python 1_document_loading.py      # Concepts
+python 2_text_splitting.py         # Text chunking
+python 3_embeddings_vector_store.py # Real embeddings & Chroma
+python 4_rag_retrieval_system.py    # RAG pipeline
+python 5_rag_prompts.py             # Prompt engineering
+python 6_conversation_memory.py     # Memory management
+python 7_complete_rag_agent.py      # Full system with Ollama LLM
+```
+
+**No API keys required — everything runs locally!**
 
 ## Exercises Overview
 
@@ -90,50 +130,54 @@ python 2_text_splitting.py
 ### Exercise 3: Embeddings and Vector Storage
 **File:** `3_embeddings_vector_store.py`
 
-Understand how text is converted to vectors and searched semantically.
+Learn to use real HuggingFace embeddings and Chroma vector store.
 
 **Key Concepts:**
-- What embeddings are and why they matter
-- Calculating semantic similarity
-- Vector database concepts
-- In-memory vector store implementation
-- Embedding models (HuggingFace, OpenAI, local)
+- HuggingFaceEmbeddings with all-MiniLM-L6-v2 (384 dimensions)
+- Cosine similarity calculation
+- **Chroma** vector database (local SQLite-based)
+- Persistent storage with automatic indexing
+- Semantic search instead of keyword matching
 
 **Key Takeaways:**
-- Embeddings capture semantic meaning
-- Similarity search enables semantic retrieval
-- Vector stores optimize for fast search
-- Multiple embedding models available
+- Real embeddings from sentence-transformers
+- Chroma provides local, persistent storage
+- Semantic search uses vector similarity
+- Production-ready for RAG systems
 
 **Run:**
 ```bash
 python 3_embeddings_vector_store.py
 ```
 
+**Note:** First run downloads all-MiniLM-L6-v2 model (~100MB)
+
 ---
 
 ### Exercise 4: Building a RAG Retrieval System
 **File:** `4_rag_retrieval_system.py`
 
-Create a complete RAG system with retrieval and context assembly.
+Create a production RAG system using HuggingFace embeddings and Chroma.
 
 **Key Concepts:**
-- End-to-end RAG pipeline
-- Document loading through retrieval
-- Simple vs. semantic retrieval
-- Context assembly for LLM
-- Retrieval quality metrics
+- RecursiveCharacterTextSplitter with semantic boundaries
+- HuggingFaceEmbeddings (all-MiniLM-L6-v2) for document chunks
+- Chroma vector store with metadata preservation
+- Similarity search for retrieval (top-k results)
+- Context assembly and source attribution
 
 **Key Takeaways:**
-- RAG requires 6 components working together
-- Retrieval quality directly impacts answer quality
-- Context assembly is critical
-- Metadata enables source attribution
+- End-to-end RAG pipeline with real components
+- Chroma persists data to disk automatically
+- Vector similarity enables semantic retrieval
+- Metadata tracks document source and chunk info
 
 **Run:**
 ```bash
 python 4_rag_retrieval_system.py
 ```
+
+**Output:** Creates `./chroma_rag_data/` directory with indexed documents
 
 ---
 
@@ -187,28 +231,34 @@ python 6_conversation_memory.py
 
 ---
 
-### Exercise 7: Complete RAG Agent
+### Exercise 7: Complete RAG Agent with Ollama LLM
 **File:** `7_complete_rag_agent.py`
 
-Build a fully-featured RAG agent combining all components.
+Build a fully-featured RAG agent with local LLM integration.
 
 **Key Concepts:**
-- Integrating all RAG components
-- Document indexing pipeline
-- Retrieval and generation workflow
-- Conversation management
-- Multi-turn Q&A agent
+- **HuggingFaceEmbeddings** (all-MiniLM-L6-v2) for text encoding
+- **Chroma** vector store for semantic search
+- **Ollama + Qwen2.5:7b** for local LLM generation
+- **ConversationMemory** for multi-turn interactions
+- RAG prompt engineering for grounded answers
 
 **Key Takeaways:**
-- All RAG pieces work together seamlessly
-- Data flows: Query → Retrieval → Context → LLM → Answer
-- Memory tracks conversation state
-- Complete system is powerful and practical
+- Complete local RAG system (no API keys, fully offline)
+- Ollama provides local LLM inference
+- Memory enables conversational RAG
+- Fully production-ready architecture
+
+**Prerequisites:**
+- Ollama running: `ollama serve`
+- Model downloaded: `ollama pull qwen2.5:7b`
 
 **Run:**
 ```bash
 python 7_complete_rag_agent.py
 ```
+
+**Creates:** `./chroma_rag_complete/` with indexed documents ready for querying
 
 ---
 
@@ -279,14 +329,16 @@ Answer with Source Attribution
 - Source attribution
 - Multi-turn support
 
-## Embedding Models
+## Embedding Models - Option 2 Stack
 
-| Model | Dimensions | Speed | Quality | Best For |
-|-------|-----------|-------|---------|----------|
-| all-MiniLM-L6-v2 | 384 | ⚡⚡⚡ Fast | Medium | Lightweight systems |
-| all-mpnet-base-v2 | 768 | ⚡⚡ Medium | High | Balanced needs |
-| all-distilroberta-v1 | 768 | ⚡⚡⚡ Fast | High | Fast + quality |
-| OpenAI text-embedding-3-small | 1536 | ⚡ Slow | Very High | Best quality |
+| Model | Dimensions | Speed | Quality | Status |
+|-------|-----------|-------|---------|--------|
+| **all-MiniLM-L6-v2** | 384 | ⚡⚡⚡ Fast | Good | ✓ **Using** |
+| all-mpnet-base-v2 | 768 | ⚡⚡ Medium | Excellent | Easy upgrade |
+| all-distilroberta-v1 | 768 | ⚡⚡⚡ Fast | High | Alternative |
+| OpenAI text-embedding-3-small | 1536 | ⚡ Slow | Very High | Paid API |
+
+**Current Choice:** `all-MiniLM-L6-v2` balances speed (1000 docs/sec) and quality for learning
 
 ## Common RAG Patterns
 
