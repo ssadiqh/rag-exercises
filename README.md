@@ -540,7 +540,7 @@ Beginner → Intermediate → Advanced
     ↓
 6. Memory (State Management)
     ↓
-7. Complete Agent (Production-Ready)
+7. Complete Agent (Production-style learning)
 ```
 
 ## Learning Tips
