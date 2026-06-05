@@ -95,7 +95,7 @@ print(f"Document contains: 9 company policies")
 print("\n2. SPLITTING DOCUMENTS INTO CHUNKS")
 print("-" * 70)
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=600,
@@ -116,7 +116,7 @@ print(f"Chunk range: {min(len(c) for c in chunks)}-{max(len(c) for c in chunks)}
 print("\n3. CREATING DOCUMENT OBJECTS")
 print("-" * 70)
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 documents = []
 policy_map = {
@@ -157,8 +157,8 @@ print("\n4. CREATING EMBEDDINGS AND VECTOR STORE")
 print("-" * 70)
 
 try:
-    from langchain.embeddings import HuggingFaceEmbeddings
-    from langchain.vectorstores import Chroma
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_chroma import Chroma
 
     print("Loading HuggingFaceEmbeddings (all-MiniLM-L6-v2)...")
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -299,8 +299,8 @@ Chroma automatically saves data to disk:
   Format: SQLite with vector indices
 
 Reload vector store (no re-embedding needed):
-  from langchain.vectorstores import Chroma
-  from langchain.embeddings import HuggingFaceEmbeddings
+  from langchain_chroma import Chroma
+  from langchain_community.embeddings import HuggingFaceEmbeddings
 
   embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
   vector_store = Chroma(

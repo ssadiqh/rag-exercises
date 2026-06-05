@@ -502,6 +502,54 @@ These exercises teach RAG concepts. **Moving to production requires:**
 - Use smaller embedding model
 - Implement caching
 
+### Windows-Specific Issues
+
+#### Virtual Environment Activation Fails
+**Problem:** `.venv\Scripts\Activate.ps1` doesn't work
+**Solution:** 
+```bash
+# If using PowerShell:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\.venv\Scripts\Activate.ps1
+
+# Or use cmd.exe instead:
+.\.venv\Scripts\activate.bat
+```
+
+#### NumPy Build Fails (Missing C Compiler)
+**Problem:** `ERROR: Unknown compiler(s): [['cl'], ['gcc'], ...]`
+**Solution:** NumPy needs a C compiler on Windows. Either:
+- Install Visual Studio Build Tools: https://visualstudio.microsoft.com/downloads/ (search for "Build Tools")
+- Or use pre-built wheels: `pip install --only-binary=:all: numpy`
+
+### Ollama Issues (Exercise 7)
+
+#### Connection Refused Error
+**Problem:** `Connection refused` when running Exercise 7
+**Solution:**
+```bash
+# Make sure Ollama is running in a separate terminal:
+ollama serve
+
+# Verify it's working:
+curl http://localhost:11434/api/generate -d '{"model":"qwen2.5:7b","prompt":"test"}'
+```
+
+#### Model Not Found
+**Problem:** `model not found` error
+**Solution:**
+```bash
+# Download the model:
+ollama pull qwen2.5:7b
+
+# Verify:
+ollama list
+```
+
+#### Slow Response on Windows
+**Problem:** Ollama is slow on Windows/WSL
+**Note:** This is normal for local LLMs. 7B models typically take 5-30 seconds per response depending on hardware. Use GPU acceleration if available.
+
 ## Next Steps
 
 After completing these exercises:

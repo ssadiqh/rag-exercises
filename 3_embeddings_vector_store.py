@@ -43,7 +43,7 @@ First run will download the model (~100 MB with dependencies).
 """)
 
 try:
-    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain_community.embeddings import HuggingFaceEmbeddings
     print("✓ HuggingFaceEmbeddings imported successfully")
 
     # Initialize embeddings
@@ -177,8 +177,8 @@ print("\n7. CREATING VECTOR STORE WITH CHROMA")
 print("-" * 70)
 
 try:
-    from langchain.vectorstores import Chroma
-    from langchain.schema import Document
+    from langchain_chroma import Chroma
+    from langchain_core.documents import Document
 
     print("✓ Chroma imported successfully")
 

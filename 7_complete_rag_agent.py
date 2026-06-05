@@ -112,7 +112,7 @@ print(f"Document loaded: {len(company_policies)} characters, 9 policies")
 print("\n2. SPLITTING DOCUMENTS")
 print("-" * 70)
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100)
 with open(doc_path, 'r') as f:
@@ -124,7 +124,7 @@ print(f"Split into {len(chunks)} chunks")
 print("\n3. CREATING DOCUMENT OBJECTS")
 print("-" * 70)
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 documents = []
 for i, chunk in enumerate(chunks):
@@ -141,8 +141,8 @@ print("\n4. SETTING UP EMBEDDINGS AND VECTOR STORE")
 print("-" * 70)
 
 try:
-    from langchain.embeddings import HuggingFaceEmbeddings
-    from langchain.vectorstores import Chroma
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_chroma import Chroma
 
     print("Loading HuggingFaceEmbeddings (all-MiniLM-L6-v2)...")
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
